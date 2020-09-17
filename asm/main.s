@@ -12,7 +12,7 @@ main_gameRoutine:
 	bl CallBGScrollCallback1
 	bl render_800172C
 	bl copyObjAttributesToIWRAM_802FE0C
-	bl ProcessGFXTransferQueue
+	bl Transfer_ProcessQueue
 	bl getPalleteAndTransition_80023E0
 	bl copyPalletesToIWRAM_8001808
 	bl copyPalletesToIWRAM_8002650
@@ -256,7 +256,7 @@ loc_80004C0:
 	bl sub_800260C
 	bl sub_80027C4
 	bl sub_802FDB0
-	bl clearWord_e200AC1C
+	bl Transfer_ClearQueue
 	bl clearChatboxAndEvent
 	bl cleareMemory_802FF2C
 	bl reqBBS_init_8004DF0

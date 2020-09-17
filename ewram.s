@@ -884,7 +884,7 @@ unk_200AA98:: // 0x200aa98
 	.space 384
 eNumOWObjectInteractionAreas:: // 0x200ac18
 	.space 4
-dword_200AC1C:: // 0x200ac1c
+eDataTransferQueueSize:: // 0x200ac1c
 	.space 4
 byte_200AC20:: // 0x200ac20
 	.space 1
@@ -976,14 +976,8 @@ word_200B1BA:: // 0x200b1ba
 unk_200B2B0:: // 0x200b2b0
 	.space 512
 // array of 5 words, then zeros?
-fiveWordArr200B4B0:: // 0x200b4b0
-	.space 4*5
-	.space 4*5
-	.space 4*5
-	.space 4*5
-	.space 4*5
-	.space 4*5
-	.space 1800
+eDataTransferQueue:: // 0x200b4b0
+	.space 4*5 * 0x60 // sizeof(data_transfer_struct) * 0x60
 eStruct200BC30:: // 0x200bc30
 	.space 1
 byte_200BC31:: // 0x200bc31

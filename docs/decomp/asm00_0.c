@@ -451,47 +451,48 @@ void __cdecl FillByEightWords(void *src, int size, int fill)
 
 
 // 0x80009cc
-int __fastcall sub_80009CC(int result, int a2, int a3, int a4)
+void __fastcall Transfer_SetDmaParams(void *startAddress, void *endAddress, int wordCount, int channelIndex)
 {
-    int v4; // r4
+    int control; // r4
     int *v5; // r5
 
-    v5 = off_80009EC[a4];
+    v5 = channelList[channelIndex];
+    // while ((channelList->control & DMA_ENABLE) != 0);
     while ( v5[2] & 0x80000000 )
         ;
-    *v5 = result;
-    v5[1] = a2;
-    v5[2] = v4 | a3;
-    return result;
+    *v5 =startAddress;
+    v5[1] = endAddress;
+    v5[2] = control | wordCount;
+    return;
 }
 
 
 // 0x80009fc
-int __fastcall sub_80009FC(int result)
+void __fastcall Transfer_WaitForDmaEnd(int flags)
 {
     int v1; // r1
 
     do
     {
         v1 = 0;
-        if ( result & 1 )
+        if ( flags & 1 )
             v1 = *&DMA0WordCount;
-        if ( result & 2 )
+        if ( flags & 2 )
             v1 |= *&DMA1WordCount;
-        if ( result & 4 )
+        if ( flags & 4 )
             v1 |= *&DMA2WordCount;
-        if ( result & 8 )
+        if ( flags & 8 )
             v1 |= *&DMA3WordCount;
     }
     while ( v1 & 0x80000000 );
-    return result;
+    return;
 }
 
 
 // 0x8000a3c
-void __cdecl clearWord_e200AC1C()
+void __cdecl Transfer_ClearQueue()
 {
-    dword_200AC1C = 0;
+    eDataTransferQueueSize = 0;
 }
 
 
@@ -507,8 +508,8 @@ void __cdecl objRender_8000A44()
     int v6; // r4
     int v7; // r4
 
-    v0 = dword_200AC1C;
-    for ( i = fiveWordArr200B4B0; ; i = v5 + 5 )
+    v0 = eDataTransferQueueSize;
+    for ( i = eDataTransferQueue; ; i = v5 + 5 )
     {
         v2 = __OFSUB__(v0, 1);
         v3 = v0 - 1;
@@ -524,26 +525,26 @@ void __cdecl objRender_8000A44()
         else
         {
             v7 = i[3];
-            sub_80009CC(*i, i[1], i[2] >> 2, 3);
-            sub_80009FC(8);
+            Transfer_SetDmaParams(*i, i[1], i[2] >> 2, 3);
+            Transfer_WaitForDmaEnd(8);
         }
         v0 = v4;
     }
-    clearWord_e200AC1C();
+    Transfer_ClearQueue();
 }
 
 
 // 0x8000ab8
-int __fastcall sub_8000AB8(int result, int a2, int a3)
+int __fastcall QueueDmaGFXTransfer(int result, int a2, int a3)
 {
     int v3; // r4
     int *v4; // r4
 
-    v3 = dword_200AC1C;
-    if ( dword_200AC1C < 96 )
+    v3 = eDataTransferQueueSize;
+    if ( eDataTransferQueueSize < 96 )
     {
-        ++dword_200AC1C;
-        v4 = &fiveWordArr200B4B0[5 * v3];
+        ++eDataTransferQueueSize;
+        v4 = &eDataTransferQueue[5 * v3];
         *v4 = result;
         v4[1] = a2;
         v4[2] = a3;
@@ -555,7 +556,7 @@ int __fastcall sub_8000AB8(int result, int a2, int a3)
 
 
 // 0x8000b18
-int __fastcall sub_8000B18(int *a1)
+int __fastcall Transfer_EnqueueDmaList(int *a1)
 {
     int *i; // r7
     int result; // r0
@@ -565,7 +566,7 @@ int __fastcall sub_8000B18(int *a1)
         result = *i;
         if ( !*i )
             break;
-        sub_8000AB8(result, i[1], i[2]);
+        QueueDmaGFXTransfer(result, i[1], i[2]);
     }
     return result;
 }

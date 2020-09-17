@@ -639,11 +639,17 @@ FillByEightWords:
 .FillCpuFastSetMask_80009C8: .word 0x1000000
 	thumb_func_end FillByEightWords
 
+// Sets the parameters of a specific DMA channel.
+// r0: startAddress: The starting address.
+// r1: endAddress: The ending address.
+// r2: wordCount: The amount of 32-bit words to transfer.
+// r3: dmaChannel: The channel to set parameters for.
+// r4: control: The control flags for the channel.
 	thumb_local_start
-sub_80009CC:
+Transfer_SetDmaParams:
 	push {r4-r7,lr}
 	lsl r3, r3, #2
-	ldr r5, off_80009E8 // =off_80009EC
+	ldr r5, ptrChannelList // =channelList
 	ldr r5, [r5,r3]
 	mov r3, #8
 	ldr r7, dword_8000A38 // =0x80000000
@@ -657,17 +663,21 @@ loc_80009D8:
 	str r4, [r5,#8]
 	pop {r4-r7,pc}
 	.balign 4, 0
-off_80009E8: .word off_80009EC
-off_80009EC: .word DMA0SourceAddress
+ptrChannelList: .word channelList
+channelList: .word DMA0SourceAddress
 	.word DMA1SourceAddress
 	.word DMA2SourceAddress
 	.word DMA3SourceAddress
-	thumb_func_end sub_80009CC
+	thumb_func_end Transfer_SetDmaParams
 
+
+// Waits for any active DMA transfers to end.
+// r0: flags: The DMA channels to check. Bit 0 checks DMA0, Bit 1 DMA1, and so
+// on.
 	thumb_local_start
-sub_80009FC:
+Transfer_WaitForDmaEnd:
 	push {r4,lr}
-	ldr r3, off_8000A34 // =DMA0SourceAddress
+	ldr r3, ptrDmaChannels // =DMA0SourceAddress
 loc_8000A00:
 	mov r1, #0
 	mov r4, #1
@@ -699,53 +709,57 @@ loc_8000A2A:
 	bne loc_8000A00
 	pop {r4,pc}
 	.balign 4, 0
-off_8000A34: .word DMA0SourceAddress
+ptrDmaChannels: .word DMA0SourceAddress
 dword_8000A38: .word 0x80000000
-	thumb_func_end sub_80009FC
+	thumb_func_end Transfer_WaitForDmaEnd
 
-	thumb_func_start clearWord_e200AC1C
-clearWord_e200AC1C:
-	ldr r0, off_8000B10 // =dword_200AC1C
+// Clears the transfer queue.
+	thumb_func_start Transfer_ClearQueue
+Transfer_ClearQueue:
+	ldr r0, ptrDmaTransferQueueSize_8000B10 // =eDataTransferQueueSize
 	mov r1, #0
 	str r1, [r0]
 	mov pc, lr
-	thumb_func_end clearWord_e200AC1C
+	thumb_func_end Transfer_ClearQueue
 
-	thumb_func_start ProcessGFXTransferQueue
-ProcessGFXTransferQueue:
+// Performs all enqueued data transfers.
+	thumb_func_start Transfer_ProcessQueue
+Transfer_ProcessQueue:
 	push {lr}
 	mov r0, r8
 	mov r1, r9
 	push {r0,r1,r4-r7}
-	ldr r0, off_8000B10 // =dword_200AC1C
+	ldr r0, ptrDmaTransferQueueSize_8000B10 // =eDataTransferQueueSize
 	ldr r1, [r0]
-	ldr r2, off_8000B14 // =fiveWordArr200B4B0
+	ldr r2, ptrDataTransferQueue_8000B14 // =eDataTransferQueue
 loc_8000A52:
 	sub r1, #1
 	blt loc_8000A96
 	mov r8, r1
 	mov r9, r2
-	ldr r4, [r2,#0x10]
-	cmp r4, #1
+	ldr r4, [r2,#oDataTransferParams_TransferType]
+	cmp r4, #DATATRANSFERTYPE_BYTE
 	bge loc_8000A7C
-	ldr r4, [r2,#0xc]
-	ldr r0, [r2]
-	ldr r1, [r2,#4]
-	ldr r2, [r2,#8]
+	// If transfer type 0, perform transfer using DMA3
+	ldr r4, [r2,#oDataTransferParams_Control]
+	ldr r0, [r2,#oDataTransferParams_StartAddress]
+	ldr r1, [r2,#oDataTransferParams_EndAddress]
+	ldr r2, [r2,#oDataTransferParams_WordCount]
 	lsr r2, r2, #2
 	mov r3, #3
-	bl sub_80009CC
+	bl Transfer_SetDmaParams
 	mov r0, #8
-	bl sub_80009FC
+	bl Transfer_WaitForDmaEnd
 	mov r1, r8
 	mov r2, r9
 	b loc_8000A92
 loc_8000A7C:
+	// If transfer type is >= 1, then do 1/2/4/8 byte transfer
 	sub r4, #1
 	lsl r4, r4, #2
-	ldr r0, [r2]
-	ldr r1, [r2,#4]
-	ldr r2, [r2,#8]
+	ldr r0, [r2,#oDataTransferParams_StartAddress]
+	ldr r1, [r2,#oDataTransferParams_EndAddress]
+	ldr r2, [r2,#oDataTransferParams_WordCount]
 	ldr r3, off_8000AA4 // =CopyJumpTable8000AA8
 	ldr r3, [r3,r4]
 	mov lr, pc
@@ -753,10 +767,12 @@ loc_8000A7C:
 	mov r1, r8
 	mov r2, r9
 loc_8000A92:
+	// Once transfer is done, move on to next param set
 	add r2, #0x14
 	b loc_8000A52
 loc_8000A96:
-	bl clearWord_e200AC1C
+	// Once the queue is done, empty it before returning
+	bl Transfer_ClearQueue
 	pop {r0,r1,r4-r7}
 	mov r8, r0
 	mov r9, r1
@@ -767,10 +783,10 @@ CopyJumpTable8000AA8: .word CopyBytes+1
 	.word CopyHalfwords+1
 	.word CopyWords+1
 	.word CopyByEightWords+1
-	thumb_func_end ProcessGFXTransferQueue
+	thumb_func_end Transfer_ProcessQueue
 
 	thumb_local_start
-QueueUnk00GFXTransfer:
+QueueDmaGFXTransfer:
 	mov r3, #0
 	b loc_8000ACA
 
@@ -801,7 +817,7 @@ QueueEightWordAlignedGFXTransfer: // (void *queuedSource, void *queuedDest, int 
 loc_8000ACA: // (void *queuedSource, void *queuedDest, int queuedSize, unk copyType) -> void
 	push {r4-r7}
 	mov r7, r3
-	ldr r3, off_8000B10 // =dword_200AC1C 
+	ldr r3, ptrDmaTransferQueueSize_8000B10 // =eDataTransferQueueSize 
 	// r4 = count of something?
 	ldr r4, [r3]
 	cmp r4, #0x60
@@ -809,11 +825,11 @@ loc_8000ACA: // (void *queuedSource, void *queuedDest, int queuedSize, unk copyT
 	mov r5, r4
 	add r4, #1
 	str r4, [r3]
-	ldr r4, off_8000B14 // =fiveWordArr200B4B0
+	ldr r4, ptrDataTransferQueue_8000B14 // =eDataTransferQueue
 	mov r6, #0x14
-	// r5 = count * sizeof(fiveWordArr200B4B0)
+	// r5 = count * sizeof(eDataTransferQueue)
 	mul r5, r6
-	// r4 = fiveWordArr200B4B0[top]
+	// r4 = eDataTransferQueue[top]
 	add r4, r4, r5
 	str r0, [r4]
 	str r1, [r4,#4]
@@ -833,31 +849,34 @@ dword_8000AFC: .word 0x84000000
 	.word 0xffffffff
 	.word 0xffffffff
 	.word 0xffffffff
-off_8000B10: .word dword_200AC1C
-off_8000B14: .word fiveWordArr200B4B0
-	thumb_func_end QueueUnk00GFXTransfer
+ptrDmaTransferQueueSize_8000B10: .word eDataTransferQueueSize
+ptrDataTransferQueue_8000B14: .word eDataTransferQueue
+	thumb_func_end QueueDmaGFXTransfer
 	thumb_func_end QueueByteAlignedGFXTransfer
 	thumb_func_end QueueHwordAlignedGFXTransfer
 	thumb_func_end QueueWordAlignedGFXTransfer
 	thumb_func_end QueueEightWordAlignedGFXTransfer
 
-
+// Enqueues a list of transfer parameters.
+// r0: transferList: A list of transfer parameters.
+// Each parameter consists of a start address, an end address, and a word
+// count.
 	thumb_local_start
-sub_8000B18:
+Transfer_EnqueueDmaList:
 	push {r4-r7,lr}
 	mov r7, r0
 loc_8000B1C:
 	ldr r0, [r7]
 	tst r0, r0
-	beq locret_8000B2E
+	beq off_8000B2E
 	ldr r1, [r7,#4]
 	ldr r2, [r7,#8]
-	bl QueueUnk00GFXTransfer
+	bl QueueDmaGFXTransfer
 	add r7, #0xc
 	b loc_8000B1C
-locret_8000B2E:
+off_8000B2E:
 	pop {r4-r7,pc}
-	thumb_func_end sub_8000B18
+	thumb_func_end Transfer_EnqueueDmaList
 
 // (u32 *initRefs) -> void
 // This processes an array and performs different actions based on

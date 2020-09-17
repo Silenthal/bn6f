@@ -189,7 +189,7 @@ void __cdecl main_initToolkitAndOtherSubsystems()
     sub_800260C();
     sub_80027C4();
     sub_802FDB0();
-    clearWord_e200AC1C();
+    Transfer_ClearQueue();
     clearChatboxAndEvent();
     cleareMemory_802FF2C();
     reqBBS_init_8004DF0();
